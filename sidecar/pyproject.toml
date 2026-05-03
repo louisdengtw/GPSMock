@@ -11,8 +11,9 @@ dependencies = [
   "fastapi>=0.110,<0.120",
   "uvicorn[standard]>=0.27,<0.40",
   "pydantic>=2.6,<3",
-  # Pinned to a known-good range. See docs/setup.md §6 for upgrade procedure.
-  "pymobiledevice3>=4.14,<5",
+  # Bumped 2026-05 for iOS 26 support — 4.x bundled DDI was iOS 17-only.
+  # See docs/setup.md §6 for upgrade procedure.
+  "pymobiledevice3>=9.10,<10",
 ]
 
 [project.optional-dependencies]

@@ -62,14 +62,14 @@ The status pill shows one of three states. Each maps to a single concrete fix.
 | Pill says | Means | Fix |
 |---|---|---|
 | `Sidecar not running` | App can't reach `127.0.0.1:5555` | Run `make sidecar` (Terminal B). If it errors `address already in use`, check `lsof -i :5555` for a stale process and kill it. |
-| `Tunneld unreachable` | Sidecar reached, tunneld isn't | Run `sudo pymobiledevice3 remote tunneld` (Terminal A). Re-prompt for password if your sudo session expired. |
+| `Tunneld unreachable` | Sidecar reached, tunneld isn't | Run `sudo pymobiledevice3 remote tunneld` (Terminal A). Re-prompt for password if your sudo session expired. **Also: if Xcode's "Devices and Simulators" window is open, it holds the RemoteXPC tunnel exclusively and tunneld can't connect — close that window (Xcode itself can stay open).** |
 | `No iPhone detected` | Tunneld is up but sees no device | Plug the iPhone in via USB. If freshly trusted, unplug/replug. Confirm Developer Mode is on. |
 | `Connected: <name>` | Ready | Tap the map. |
 
 Other things to try when you're really stuck:
 
 - **Mounter errors** (visible in sidecar console): delete `~/Library/Developer/Xcode/iOS DeviceSupport/<version>/` and re-run; the mounter will re-fetch the personalized image.
-- **iOS 26**: if the personalized DDI auto-mount fails with a fresh error, try `sudo pymobiledevice3 mounter auto-mount` once from a terminal — sometimes iOS 26 needs a manual nudge before tunneld picks it up.
+- **iOS 26 DDI mount hangs / times out**: pymobiledevice3's `auto_mount_personalized` is unreliable on iOS 26. Easiest fix: open Xcode → Window → Devices and Simulators (⌘⇧2), wait until your iPhone shows in "Connected" with full info (model / iOS / identifier) on the right pane — Xcode mounts the personalized DDI itself in this step. Then **close that window** (so it releases the tunnel), restart `tunneld.sh`, and re-run. The sidecar detects the existing mount via `is_image_mounted` and skips the flaky path. The mount persists on the iPhone until reboot.
 - **iPhone stuck on a fake fix after a hard kill**: wait ~60 s for iOS's own simulation timeout, or reboot the iPhone if you're impatient.
 - **Cable**: a USB-C-to-Lightning data cable (not charge-only) is required.
 

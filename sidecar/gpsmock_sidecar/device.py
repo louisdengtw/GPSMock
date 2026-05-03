@@ -1,4 +1,4 @@
-"""Thin wrapper around pymobiledevice3 for iOS 17+ location simulation.
+"""Thin wrapper around pymobiledevice3 (9.x) for iOS 17+ location simulation.
 
 The wrapper hides three things from the rest of the sidecar:
   1. Tunneld discovery (RemoteServiceDiscoveryService over the local tunneld HTTP API).
@@ -7,14 +7,25 @@ The wrapper hides three things from the rest of the sidecar:
 
 Everything that talks to pymobiledevice3 lives here; if the upstream API moves,
 this is the only file that needs to follow.
+
+pymobiledevice3 9.x notes:
+  - tunneld discovery: `pymobiledevice3.tunneld.api.get_tunneld_devices()` (sync).
+  - DDI mount: `auto_mount_personalized` is async — drive on the persistent loop.
+  - DVT: `DvtProvider` (formerly `DvtSecureSocketProxyService`) — async ctx mgr.
+  - LocationSimulation: async ctx mgr; `set` and `clear` are async.
 """
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import threading
 import time
 from dataclasses import dataclass
+from typing import Any
+
+MOUNT_TIMEOUT_S = 90.0  # personalized DDI mount on iOS 26 sometimes hangs; fail loud instead.
+MOUNT_QUERY_TIMEOUT_S = 10.0  # checking "already mounted?" should be near-instant.
 
 
 log = logging.getLogger(__name__)
@@ -56,9 +67,11 @@ class DeviceManager:
 
     def __init__(self) -> None:
         self._lock = threading.RLock()
-        self._rsd = None  # RemoteServiceDiscoveryService
-        self._dvt = None  # DvtSecureSocketProxyService
-        self._loc = None  # LocationSimulation
+        self._rsd: Any = None  # RemoteServiceDiscoveryService
+        self._dvt: Any = None  # DvtProvider (entered)
+        self._loc: Any = None  # LocationSimulation (entered)
+        self._dvt_cm: Any = None  # async ctx mgr handle, for __aexit__
+        self._loc_cm: Any = None
         self._info: DeviceInfo | None = None
         self._mounted_for_udid: str | None = None
 
@@ -83,10 +96,7 @@ class DeviceManager:
             self._ensure_session()
             log.debug("set_location lat=%.6f lon=%.6f", lat, lon)
             try:
-                self._loc.simulate_location(lat, lon)  # pymobiledevice3 4.x API
-            except AttributeError:
-                # Older pymobiledevice3 used .set(...). Be tolerant.
-                self._loc.set(lat, lon)
+                self._run_async(self._loc.set(lat, lon))
             except Exception:
                 log.exception("set_location failed, dropping session for retry")
                 self._reset()
@@ -99,18 +109,28 @@ class DeviceManager:
                 log.debug("clear_location: no active session, no-op")
                 return
             try:
-                # pymobiledevice3 exposes either .clear() or .stop(). Try both.
-                clear = getattr(self._loc, "clear", None) or getattr(self._loc, "stop", None)
-                if clear is None:
-                    log.warning("LocationSimulation has no clear/stop method; skipping")
-                    return
-                clear()
+                self._run_async(self._loc.clear())
                 log.info("clear_location: simulation stopped")
             except Exception:
                 log.exception("clear_location failed (ignored, real GPS will time out)")
                 self._reset()
 
+    def shutdown(self) -> None:
+        """Best-effort cleanup on sidecar exit."""
+        with self._lock:
+            try:
+                self.clear_location()
+            finally:
+                self._reset()
+
     # ------------------------------------------------------------------ internal
+
+    @staticmethod
+    def _run_async(coro):
+        """Drive a coroutine on pymobiledevice3's persistent asyncio loop."""
+        from pymobiledevice3.utils import get_asyncio_loop
+
+        return get_asyncio_loop().run_until_complete(coro)
 
     def _ensure_session(self) -> None:
         """Acquire RSD + DVT + LocationSimulation if not already cached."""
@@ -127,13 +147,11 @@ class DeviceManager:
 
         self._auto_mount(rsd, info.udid)
 
-        t2 = time.monotonic()
-        dvt, loc = self._open_dvt(rsd)
-        log.info("DVT handshake ok (%.2fs)", time.monotonic() - t2)
+        t1 = time.monotonic()
+        self._open_dvt_session(rsd)
+        log.info("DVT session open (%.2fs)", time.monotonic() - t1)
 
         self._rsd = rsd
-        self._dvt = dvt
-        self._loc = loc
         self._info = info
 
         log.info(
@@ -142,38 +160,19 @@ class DeviceManager:
         )
 
     def _discover_device(self):
-        """Hit the local tunneld HTTP API and pick the first device.
-
-        tunneld exposes a small JSON API (default port 49151) listing connected
-        devices and their RemoteXPC tunnel addresses. We import lazily so import
-        errors map to TunneldUnreachableError rather than crashing module load.
-        """
+        """Hit the local tunneld HTTP API and pick the first device."""
         try:
             from pymobiledevice3.remote.remote_service_discovery import (
                 RemoteServiceDiscoveryService,
             )
-
-            # Prefer the sync wrapper — it uses pymobiledevice3's persistent
-            # asyncio loop, so the RSD's underlying connection stays alive after
-            # this call. asyncio.run() would close the loop and break the RSD.
-            _get = None
-            for path in (
-                ("pymobiledevice3.tunneld.api", "get_tunneld_devices"),
-                ("pymobiledevice3.tunneld", "get_tunneld_devices"),
-            ):
-                try:
-                    mod = __import__(path[0], fromlist=[path[1]])
-                    _get = getattr(mod, path[1])
-                    break
-                except (ImportError, AttributeError):
-                    continue
-            if _get is None:
-                raise ImportError("no get_tunneld_devices found in pymobiledevice3.tunneld[.api]")
+            from pymobiledevice3.tunneld.api import get_tunneld_devices
         except ImportError as e:
             raise TunneldUnreachableError(f"pymobiledevice3 import failed: {e}") from e
 
         try:
-            devices = _get()
+            # 9.x: get_tunneld_devices is async (no sync wrapper). Drive on the
+            # persistent loop so the returned RSD's tasks stay on the same one.
+            devices = self._run_async(get_tunneld_devices())
         except Exception as e:
             raise TunneldUnreachableError(
                 f"tunneld unreachable — is `sudo pymobiledevice3 remote tunneld` running? ({e})"
@@ -183,20 +182,13 @@ class DeviceManager:
             raise NoDeviceError("tunneld reports no connected iPhone")
 
         first = devices[0]
-        # Devices come back as either RSD instances or (host, port) tuples depending on version.
         if isinstance(first, RemoteServiceDiscoveryService):
             return first
+        # Defensive — older tunneld returned (host, port) tuples. 9.x returns RSD instances.
         if isinstance(first, tuple) and len(first) == 2:
             host, port = first
             rsd = RemoteServiceDiscoveryService((host, port))
-            rsd.connect()
-            return rsd
-        # Best-effort: assume it has .host / .port
-        host = getattr(first, "host", None) or getattr(first, "address", None)
-        port = getattr(first, "port", None)
-        if host and port:
-            rsd = RemoteServiceDiscoveryService((host, port))
-            rsd.connect()
+            self._run_async(rsd.connect())
             return rsd
         raise TunneldUnreachableError(
             f"tunneld returned an unrecognized device record: {type(first).__name__}"
@@ -221,76 +213,134 @@ class DeviceManager:
         return DeviceInfo(udid=udid, name=name, ios_version=ios_version)
 
     def _auto_mount(self, rsd, udid: str) -> None:
-        """Mount the personalized Developer Disk Image once per UDID."""
+        """Mount the personalized Developer Disk Image once per UDID.
+
+        Strategy:
+          1. Skip if this DeviceManager has already mounted for this UDID.
+          2. Skip if the iPhone reports the Personalized image already mounted
+             (e.g. Xcode mounted it during pairing). iOS 26 mount via
+             auto_mount_personalized is flaky, so reusing Xcode's mount is faster
+             and more reliable when available.
+          3. Otherwise call auto_mount_personalized with a hard timeout — iOS 26
+             can hang the TSS / mount step indefinitely.
+        """
         if self._mounted_for_udid == udid:
-            log.debug("DDI already mounted for udid=%s", udid)
+            log.debug("DDI already mounted (cached) for udid=%s", udid)
             return
-        try:
-            from pymobiledevice3.services.mobile_image_mounter import (
-                auto_mount_personalized,
-            )
-        except ImportError:
-            # Older pymobiledevice3 versions called this differently or did it implicitly.
-            log.info("auto_mount_personalized not available; skipping explicit mount")
+
+        if self._is_already_mounted_on_device(rsd):
+            log.info("personalized DDI already mounted on iPhone (likely by Xcode) — skipping mount")
             self._mounted_for_udid = udid
             return
 
-        log.info("mounting personalized DDI for udid=%s (first run downloads ~10MB + signs via Apple TSS, can take 10–60s)", udid)
+        from pymobiledevice3.services.mobile_image_mounter import auto_mount_personalized
+
+        log.info(
+            "mounting personalized DDI for udid=%s "
+            "(first run downloads ~10MB + signs via Apple TSS, can take 10–60s; "
+            "hard timeout %.0fs)",
+            udid, MOUNT_TIMEOUT_S,
+        )
         t0 = time.monotonic()
         try:
-            result = auto_mount_personalized(rsd)
-            # pymobiledevice3 ≥4.x made this a coroutine. Drive it on the
-            # library's persistent loop so the RSD's tasks stay on the same one.
-            import inspect
-
-            if inspect.iscoroutine(result):
-                from pymobiledevice3.utils import get_asyncio_loop
-
-                get_asyncio_loop().run_until_complete(result)
+            self._run_async(asyncio.wait_for(auto_mount_personalized(rsd), MOUNT_TIMEOUT_S))
             self._mounted_for_udid = udid
             log.info("DDI mount ok (%.2fs)", time.monotonic() - t0)
+        except asyncio.TimeoutError as e:
+            log.error(
+                "DDI mount timed out after %.0fs — iOS 26 personalized DDI can hang. "
+                "Workaround: open Xcode → Window → Devices and Simulators, wait until "
+                "your iPhone shows green, then retry. Xcode mounts the DDI itself and "
+                "this sidecar will reuse that mount.",
+                MOUNT_TIMEOUT_S,
+            )
+            raise MounterError(
+                f"personalized DDI auto-mount timed out after {MOUNT_TIMEOUT_S:.0f}s "
+                f"— try Xcode auto-mount first"
+            ) from e
         except Exception as e:
             log.exception("DDI mount failed after %.2fs", time.monotonic() - t0)
-            raise MounterError(f"personalized DDI auto-mount failed: {e}") from e
+            raise MounterError(
+                f"personalized DDI auto-mount failed: {type(e).__name__}: {e}"
+            ) from e
 
-    @staticmethod
-    def _open_dvt(rsd):
-        from pymobiledevice3.services.dvt.dvt_secure_socket_proxy import (
-            DvtSecureSocketProxyService,
+    def _is_already_mounted_on_device(self, rsd) -> bool:
+        """Ask the iPhone whether the Personalized DDI is currently mounted.
+
+        Returns False on any failure — caller will then attempt the mount path,
+        which has its own error handling. This is purely an optimization /
+        workaround for iOS 26 mounter flakiness.
+        """
+        from pymobiledevice3.services.mobile_image_mounter import (
+            MobileImageMounterService,
+            PersonalizedImageMounter,
         )
+
+        async def _query() -> bool:
+            async with MobileImageMounterService(lockdown=rsd) as svc:
+                return await svc.is_image_mounted(PersonalizedImageMounter.IMAGE_TYPE)
+
+        try:
+            return self._run_async(asyncio.wait_for(_query(), MOUNT_QUERY_TIMEOUT_S))
+        except Exception as e:
+            log.warning(
+                "could not query existing DDI mount state (will attempt mount anyway): %s: %s",
+                type(e).__name__, e,
+            )
+            return False
+
+    def _open_dvt_session(self, rsd) -> None:
+        """Enter DvtProvider + LocationSimulation as async context managers."""
+        from pymobiledevice3.services.dvt.instruments.dvt_provider import DvtProvider
         from pymobiledevice3.services.dvt.instruments.location_simulation import (
             LocationSimulation,
         )
 
-        dvt = DvtSecureSocketProxyService(lockdown=rsd)
-        dvt.perform_handshake()
-        loc = LocationSimulation(dvt)
-        return dvt, loc
+        dvt_cm = DvtProvider(rsd)
+        dvt = self._run_async(dvt_cm.__aenter__())
+        try:
+            loc_cm = LocationSimulation(dvt)
+            loc = self._run_async(loc_cm.__aenter__())
+        except Exception:
+            # Roll back the DVT context if LocationSimulation entry fails.
+            try:
+                self._run_async(dvt_cm.__aexit__(None, None, None))
+            except Exception:
+                log.debug("aexit on DvtProvider during rollback raised", exc_info=True)
+            raise
+
+        self._dvt_cm, self._dvt = dvt_cm, dvt
+        self._loc_cm, self._loc = loc_cm, loc
 
     def _reset(self) -> None:
         """Drop cached handles so the next call re-discovers the device."""
         if self._info is not None:
             log.info("dropping session for udid=%s", self._info.udid)
-        for closer_attr in ("close", "stop"):
-            for h in (self._loc, self._dvt, self._rsd):
-                if h is None:
-                    continue
-                fn = getattr(h, closer_attr, None)
+
+        # Exit async context managers in reverse order (LocationSimulation first).
+        for cm in (self._loc_cm, self._dvt_cm):
+            if cm is None:
+                continue
+            try:
+                self._run_async(cm.__aexit__(None, None, None))
+            except Exception:
+                log.debug("aexit on %s raised", type(cm).__name__, exc_info=True)
+
+        # RSD has a sync close.
+        if self._rsd is not None:
+            for closer_attr in ("close", "stop"):
+                fn = getattr(self._rsd, closer_attr, None)
                 if callable(fn):
                     try:
                         fn()
                     except Exception:
-                        log.debug("close/stop on %s raised", type(h).__name__, exc_info=True)
+                        log.debug("close on RSD raised", exc_info=True)
+                    break
+
         self._rsd = None
         self._dvt = None
         self._loc = None
+        self._dvt_cm = None
+        self._loc_cm = None
         self._info = None
         # Keep _mounted_for_udid — DDI mount survives RSD reconnects.
-
-    def shutdown(self) -> None:
-        """Best-effort cleanup on sidecar exit."""
-        with self._lock:
-            try:
-                self.clear_location()
-            finally:
-                self._reset()

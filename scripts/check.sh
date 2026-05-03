@@ -33,12 +33,20 @@ else
 fi
 
 info "sidecar /device (DDI mount happens here, may take 10–60s first time)"
-DEV_JSON="$(curl -s --max-time 90 http://127.0.0.1:5555/device || true)"
-if printf '%s' "$DEV_JSON" | python3 -c 'import sys,json; d=json.load(sys.stdin); assert "udid" in d' 2>/dev/null; then
-  ok "device: $(printf '%s' "$DEV_JSON" | python3 -c 'import sys,json; d=json.load(sys.stdin); print(d["name"], d["ios_version"])')"
+DEV_ERR="$(mktemp)"
+DEV_JSON="$(curl -s --max-time 120 -w '\nHTTP_CODE=%{http_code}' http://127.0.0.1:5555/device 2>"$DEV_ERR")"
+DEV_RC=$?
+DEV_BODY="${DEV_JSON%$'\n'HTTP_CODE=*}"
+DEV_HTTP="${DEV_JSON##*HTTP_CODE=}"
+if [ "$DEV_RC" -ne 0 ]; then
+  fail "curl exit=$DEV_RC ($(cat "$DEV_ERR"))"
+  rc=1
+elif printf '%s' "$DEV_BODY" | python3 -c 'import sys,json; d=json.load(sys.stdin); assert "udid" in d' 2>/dev/null; then
+  ok "device: $(printf '%s' "$DEV_BODY" | python3 -c 'import sys,json; d=json.load(sys.stdin); print(d["name"], d["ios_version"])')"
 else
-  fail "device endpoint: $DEV_JSON"
+  fail "HTTP $DEV_HTTP body=$DEV_BODY"
   rc=1
 fi
+rm -f "$DEV_ERR"
 
 exit $rc

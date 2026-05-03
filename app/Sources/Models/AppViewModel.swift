@@ -41,6 +41,7 @@ final class AppViewModel {
     var transientToast: String?
     var isLocating: Bool = false
     var userLocation: CLLocationCoordinate2D?
+    var customOrigin: CLLocationCoordinate2D?
 
     // ---- Wired weak-ish via bootstrap
     private weak var connectionRef: ConnectionStateModel?
@@ -75,8 +76,9 @@ final class AppViewModel {
         await recenterOnCurrentLocation(silent: true)
     }
 
-    /// Toolbar "Locate me" action. Always queries CoreLocation and surfaces a
-    /// banner when permission is denied or the request times out.
+    /// Toolbar "Locate me" action. Reads the Mac's CoreLocation, centers the
+    /// map there, and — if the iPhone is connected — teleports the iPhone to
+    /// that coordinate so the blue dot lands on top of where the user actually is.
     @MainActor
     func recenterOnCurrentLocation(silent: Bool = false) async {
         guard !isLocating else { return }
@@ -85,7 +87,7 @@ final class AppViewModel {
         let provider = LocationProvider()
         guard let coord = await provider.requestOnce(timeout: 5) else {
             if !silent {
-                banner = "Couldn't read your location — check System Settings → Privacy → Location Services."
+                banner = "Couldn't read your location — check System Settings → Privacy & Security → Location Services."
             }
             return
         }
@@ -94,6 +96,10 @@ final class AppViewModel {
         lastKnownRegion = region
         cameraPosition = .region(region)
         persist()
+
+        if isReady {
+            await dispatchTeleport(coord)
+        }
     }
 
     func bootstrap(connection: ConnectionStateModel, status: StatusPollModel) {
@@ -132,6 +138,7 @@ final class AppViewModel {
         pendingTarget = nil
         pendingRoute = nil
         isPlanningRoute = false
+        customOrigin = nil
     }
 
     func clearAll() {
@@ -145,6 +152,7 @@ final class AppViewModel {
         }
         pendingTarget = nil
         pendingRoute = nil
+        customOrigin = nil
     }
 
     // ---------------------------------------------------------- speed / mode
@@ -194,6 +202,14 @@ final class AppViewModel {
         }
     }
 
+    /// Direct teleport from the lat/lon input bar — bypasses the map-tap flow.
+    @MainActor
+    func teleportDirect(to coord: CLLocationCoordinate2D) async {
+        pendingTarget = coord
+        pendingRoute = nil
+        await dispatchTeleport(coord)
+    }
+
     private func dispatchTeleport(_ target: CLLocationCoordinate2D) async {
         do {
             try await SidecarClient.shared.teleport(lat: target.latitude, lon: target.longitude)
@@ -221,8 +237,21 @@ final class AppViewModel {
     }
 
     private func currentOrigin() async -> CLLocationCoordinate2D {
+        // Priority: user-dragged custom origin > simulated iPhone GPS > Mac CoreLocation > map center.
+        if let c = customOrigin { return c }
         if let c = statusRef?.current { return c }
+        if let u = userLocation { return u }
         return lastKnownRegion.center
+    }
+
+    /// Called when the user drags the green start marker; sets the custom
+    /// origin and re-plans the existing route.
+    @MainActor
+    func setCustomOrigin(_ coord: CLLocationCoordinate2D) {
+        customOrigin = coord
+        if let target = pendingTarget, mode == .walk {
+            Task { await self.planRoute(to: target) }
+        }
     }
 
     // ---------------------------------------------------------- lifecycle

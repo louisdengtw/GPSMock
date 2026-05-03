@@ -2,17 +2,7 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <!-- Sandbox enabled with the minimum needed for this tool. -->
-    <key>com.apple.security.app-sandbox</key>
-    <true/>
-    <!-- Outbound network for OSRM and the local sidecar. -->
-    <key>com.apple.security.network.client</key>
-    <true/>
-    <!-- CoreLocation so first launch can center the map on the user's location. -->
-    <key>com.apple.security.personal-information.location</key>
-    <true/>
-    <!-- Application Support read/write so StateStore can persist state.json. -->
-    <key>com.apple.security.files.user-selected.read-write</key>
-    <false/>
+    <!-- App is intentionally unsandboxed (personal-use tool) so it can spawn
+         the sidecar + tunneld subprocesses on launch. -->
 </dict>
 </plist>

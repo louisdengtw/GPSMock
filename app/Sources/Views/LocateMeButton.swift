@@ -22,7 +22,7 @@ struct LocateMeButton: View {
         .background(.regularMaterial, in: Circle())
         .overlay(Circle().strokeBorder(.quaternary, lineWidth: 0.5))
         .shadow(radius: 2)
-        .help("Center map on my location")
+        .help("Center map here, and teleport iPhone to this Mac's location")
         .disabled(app.isLocating)
     }
 }

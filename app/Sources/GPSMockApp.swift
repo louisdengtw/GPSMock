@@ -1,7 +1,21 @@
+import AppKit
 import SwiftUI
+
+final class AppDelegate: NSObject, NSApplicationDelegate {
+    let supervisor = ServiceSupervisor()
+
+    func applicationWillFinishLaunching(_ notification: Notification) {
+        supervisor.start()
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        supervisor.stop()
+    }
+}
 
 @main
 struct GPSMockApp: App {
+    @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @State private var connection = ConnectionStateModel()
     @State private var status = StatusPollModel()
     @State private var appModel = AppViewModel()
@@ -42,6 +56,7 @@ struct GPSMockApp: App {
             CommandGroup(replacing: .appTermination) {
                 Button("Quit GPSMock") {
                     appModel.handleAppExit()
+                    appDelegate.supervisor.stop()
                     NSApp.terminate(nil)
                 }
                 .keyboardShortcut("q", modifiers: .command)

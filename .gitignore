@@ -31,6 +31,9 @@ xcuserdata/
 # Generated Xcode project (xcodegen)
 app/GPSMock.xcodeproj/
 
+# Local Release build output (`make app-release` / `make install`)
+app/.build/
+
 # Local state
 *.log
 .env

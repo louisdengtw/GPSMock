@@ -29,7 +29,8 @@ sidecar-test: $(SIDECAR_VENV)
 app/GPSMock.xcodeproj: app/project.yml
 	cd app && xcodegen generate
 
-app-generate: app/GPSMock.xcodeproj
+app-generate:
+	cd app && xcodegen generate
 
 app: app/GPSMock.xcodeproj
 	open app/GPSMock.xcodeproj

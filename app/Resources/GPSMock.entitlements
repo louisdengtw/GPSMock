@@ -8,6 +8,9 @@
     <!-- Outbound network for OSRM and the local sidecar. -->
     <key>com.apple.security.network.client</key>
     <true/>
+    <!-- CoreLocation so first launch can center the map on the user's location. -->
+    <key>com.apple.security.personal-information.location</key>
+    <true/>
     <!-- Application Support read/write so StateStore can persist state.json. -->
     <key>com.apple.security.files.user-selected.read-write</key>
     <false/>

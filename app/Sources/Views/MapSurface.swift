@@ -10,6 +10,20 @@ struct MapSurface: View {
 
         MapReader { proxy in
             Map(position: $app.cameraPosition, interactionModes: .all) {
+                if let mac = app.userLocation {
+                    Annotation("Mac", coordinate: mac) {
+                        ZStack {
+                            Circle()
+                                .fill(Color.gray.opacity(0.20))
+                                .frame(width: 22, height: 22)
+                            Circle()
+                                .fill(.gray)
+                                .frame(width: 10, height: 10)
+                                .overlay(Circle().strokeBorder(.white, lineWidth: 1.5))
+                        }
+                        .shadow(radius: 1)
+                    }
+                }
                 if let target = app.pendingTarget {
                     Annotation("Target", coordinate: target) {
                         Image(systemName: "mappin.circle.fill")
@@ -38,11 +52,15 @@ struct MapSurface: View {
                 }
             }
             .mapStyle(.standard(elevation: .flat))
-            .onTapGesture { screenPoint in
-                if let coord = proxy.convert(screenPoint, from: .local) {
-                    app.mapTapped(at: coord)
-                }
-            }
+            .simultaneousGesture(
+                SpatialTapGesture(coordinateSpace: .named("map"))
+                    .onEnded { value in
+                        if let coord = proxy.convert(value.location, from: .named("map")) {
+                            app.mapTapped(at: coord)
+                        }
+                    }
+            )
+            .coordinateSpace(.named("map"))
             .onMapCameraChange(frequency: .onEnd) { context in
                 app.cameraDidChange(context.region)
             }

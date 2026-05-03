@@ -86,7 +86,7 @@
 
 - [x] 13.1 Implement `StateStore` reading/writing `~/Library/Application Support/GPSMock/state.json` (last center, zoom, speed); debounce writes to ~1 s.
 - [x] 13.2 Hook `applicationWillTerminate` (or scene-phase `.background` on quit) to fire a synchronous `POST /clear` with a 2 s timeout, then exit.
-- [x] 13.3 Default first-launch map center to the user's last-known macOS location, falling back to a documented hard-coded coordinate. *(Fallback is Taipei 101; "last-known macOS location" requires CoreLocation entitlement and is deferred — the speed/center persistence covers all subsequent launches.)*
+- [x] 13.3 Default first-launch map center to the user's last-known macOS location, falling back to a documented hard-coded coordinate. *(Implemented via `LocationProvider` (CoreLocation, one-shot, 5 s timeout) gated on the `com.apple.security.personal-information.location` entitlement; falls back to Taipei 101 on denial / restriction / timeout. Persisted center takes precedence on subsequent launches.)*
 
 ## 14. Smoke test on real hardware
 

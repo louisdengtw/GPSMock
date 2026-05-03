@@ -21,7 +21,7 @@
 	<key>CFBundleVersion</key>
 	<string>1</string>
 	<key>LSMinimumSystemVersion</key>
-	<string>14.0</string>
+	<string>26.0</string>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsArbitraryLoads</key>
@@ -30,6 +30,6 @@
 	<key>NSHumanReadableCopyright</key>
 	<string></string>
 	<key>NSLocationUsageDescription</key>
-	<string>Map centers on the last-used location to keep launches fast.</string>
+	<string>Used once at launch to center the map on your current location.</string>
 </dict>
 </plist>

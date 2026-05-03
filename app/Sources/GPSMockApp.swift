@@ -16,7 +16,9 @@ struct GPSMockApp: App {
                 .frame(minWidth: 900, minHeight: 600)
                 .task {
                     appModel.bootstrap(connection: connection, status: status)
+                    async let locate: Void = appModel.acquireInitialLocationIfNeeded()
                     await connection.start()
+                    await locate
                 }
                 .onChange(of: connection.state) { _, newState in
                     status.connectionDidChange(to: newState)

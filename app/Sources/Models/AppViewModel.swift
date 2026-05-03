@@ -39,15 +39,19 @@ final class AppViewModel {
     var isPlanningRoute: Bool = false
     var banner: String?
     var transientToast: String?
+    var isLocating: Bool = false
+    var userLocation: CLLocationCoordinate2D?
 
     // ---- Wired weak-ish via bootstrap
     private weak var connectionRef: ConnectionStateModel?
     private weak var statusRef: StatusPollModel?
 
     private let store = StateStore()
+    private let hadPersistedCenter: Bool
 
     init() {
         let snap = store.load()
+        self.hadPersistedCenter = (snap.centerLat != nil && snap.centerLon != nil)
         let center = CLLocationCoordinate2D(
             latitude: snap.centerLat ?? StateStore.defaultCenter.latitude,
             longitude: snap.centerLon ?? StateStore.defaultCenter.longitude
@@ -62,6 +66,36 @@ final class AppViewModel {
         self.speedMps = snap.speedMps ?? StateStore.defaultSpeed
     }
 
+    /// On first launch (no persisted center), ask CoreLocation for a one-shot
+    /// fix and recenter the map. Falls back silently to the hard-coded default
+    /// when permission is denied or the request times out.
+    @MainActor
+    func acquireInitialLocationIfNeeded() async {
+        guard !hadPersistedCenter else { return }
+        await recenterOnCurrentLocation(silent: true)
+    }
+
+    /// Toolbar "Locate me" action. Always queries CoreLocation and surfaces a
+    /// banner when permission is denied or the request times out.
+    @MainActor
+    func recenterOnCurrentLocation(silent: Bool = false) async {
+        guard !isLocating else { return }
+        isLocating = true
+        defer { isLocating = false }
+        let provider = LocationProvider()
+        guard let coord = await provider.requestOnce(timeout: 5) else {
+            if !silent {
+                banner = "Couldn't read your location — check System Settings → Privacy → Location Services."
+            }
+            return
+        }
+        userLocation = coord
+        let region = MKCoordinateRegion(center: coord, span: lastKnownRegion.span)
+        lastKnownRegion = region
+        cameraPosition = .region(region)
+        persist()
+    }
+
     func bootstrap(connection: ConnectionStateModel, status: StatusPollModel) {
         self.connectionRef = connection
         self.statusRef = status
@@ -72,11 +106,11 @@ final class AppViewModel {
     // ---------------------------------------------------------- map taps
 
     func mapTapped(at coordinate: CLLocationCoordinate2D) {
-        guard isReady else { return }
+        // Always allow placing a target — confirm/dispatch is gated separately
+        // so users can preview routes before the iPhone is connected.
         pendingTarget = coordinate
         switch mode {
         case .teleport:
-            // Confirm immediately on the next button press; show preview-less.
             pendingRoute = nil
         case .walk:
             Task { await self.planRoute(to: coordinate) }

@@ -138,6 +138,9 @@ struct ControlsPanel: View {
         latText = String(format: "%.6f", lat)
         lonText = String(format: "%.6f", lon)
         inputError = nil
+        if let coord = parsedCoord {
+            app.placeSelected(coord)
+        }
     }
 
     private func syncFromMap() {

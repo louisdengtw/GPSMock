@@ -21,6 +21,10 @@ struct ContentView: View {
             }
             .padding(16)
         }
+        .overlay(alignment: .top) {
+            SearchBar()
+                .padding(.top, 16)
+        }
         .overlay(alignment: .topTrailing) {
             LocateMeButton()
                 .padding(16)

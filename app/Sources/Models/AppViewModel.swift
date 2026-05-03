@@ -210,6 +210,22 @@ final class AppViewModel {
         await dispatchTeleport(coord)
     }
 
+    /// Called when the user picks a search result. Sets the destination and
+    /// recenters the map; in walk mode also kicks off OSRM planning.
+    @MainActor
+    func placeSelected(_ coord: CLLocationCoordinate2D) {
+        pendingTarget = coord
+        let region = MKCoordinateRegion(center: coord, span: lastKnownRegion.span)
+        lastKnownRegion = region
+        cameraPosition = .region(region)
+        persist()
+        if mode == .walk {
+            Task { await self.planRoute(to: coord) }
+        } else {
+            pendingRoute = nil
+        }
+    }
+
     private func dispatchTeleport(_ target: CLLocationCoordinate2D) async {
         do {
             try await SidecarClient.shared.teleport(lat: target.latitude, lon: target.longitude)

@@ -6,12 +6,15 @@ struct MapSurface: View {
     @Environment(AppViewModel.self) private var app
     @Environment(StatusPollModel.self) private var status
     @State private var draggingOrigin: CLLocationCoordinate2D?
+    @State private var selectedPOI: MKMapItem?
 
     var body: some View {
         @Bindable var app = app
 
         MapReader { proxy in
-            Map(position: $app.cameraPosition, interactionModes: .all) {
+            Map(position: $app.cameraPosition,
+                interactionModes: .all,
+                selection: $selectedPOI) {
                 if let target = app.pendingTarget {
                     Annotation("Target", coordinate: target) {
                         Image(systemName: "mappin.circle.fill")
@@ -68,7 +71,14 @@ struct MapSurface: View {
                     }
                 }
             }
-            .mapStyle(.standard(elevation: .flat))
+            .mapStyle(.standard(
+                elevation: .flat,
+                pointsOfInterest: .all,
+                showsTraffic: false))
+            .onChange(of: selectedPOI) { _, item in
+                guard let item else { return }
+                app.placeSelected(item.location.coordinate)
+            }
             .simultaneousGesture(
                 SpatialTapGesture(coordinateSpace: .named("map"))
                     .onEnded { value in

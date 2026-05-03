@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gpsmock-sidecar"
+version = "0.1.0"
+description = "FastAPI sidecar that wraps pymobiledevice3 for GPSMock"
+requires-python = ">=3.11"
+dependencies = [
+  "fastapi>=0.110,<0.120",
+  "uvicorn[standard]>=0.27,<0.40",
+  "pydantic>=2.6,<3",
+  # Pinned to a known-good range. See docs/setup.md §6 for upgrade procedure.
+  "pymobiledevice3>=4.14,<5",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8",
+  "httpx>=0.27",
+  "ruff>=0.4",
+]
+
+[project.scripts]
+gpsmock-sidecar = "gpsmock_sidecar.main:run"
+
+[tool.setuptools.packages.find]
+include = ["gpsmock_sidecar*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]

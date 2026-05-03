@@ -1,0 +1,41 @@
+# macOS
+.DS_Store
+*.swp
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+*.egg-info/
+.venv/
+venv/
+env/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Xcode
+build/
+DerivedData/
+*.xcodeproj/xcuserdata/
+*.xcworkspace/xcuserdata/
+*.xcuserstate
+xcuserdata/
+*.moved-aside
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# Generated Xcode project (xcodegen)
+app/GPSMock.xcodeproj/
+
+# Local state
+*.log
+.env
+.envrc
+
+# Per-user, contains absolute paths
+.claude/settings.local.json
+buildServer.json

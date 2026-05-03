@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Sandbox enabled with the minimum needed for this tool. -->
+    <key>com.apple.security.app-sandbox</key>
+    <true/>
+    <!-- Outbound network for OSRM and the local sidecar. -->
+    <key>com.apple.security.network.client</key>
+    <true/>
+    <!-- Application Support read/write so StateStore can persist state.json. -->
+    <key>com.apple.security.files.user-selected.read-write</key>
+    <false/>
+</dict>
+</plist>

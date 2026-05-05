@@ -2,6 +2,8 @@
 
 Personal macOS tool for setting an iOS 17+ iPhone's system-level location to a point picked on a map. USB-tethered, single user, no jailbreak. Built on top of [`pymobiledevice3`](https://github.com/doronz88/pymobiledevice3) tunneld.
 
+> **Disclaimer.** Use only on devices you own. Spoofing your device's location can break or violate the terms of service of apps that rely on location (ride-sharing, dating, games, banking, etc.) — that's on you. No warranty; see [`LICENSE`](LICENSE).
+
 ```
 GPSMock.app (SwiftUI, MapKit, OSRM)
         │ HTTP (127.0.0.1:5555)

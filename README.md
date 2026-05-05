@@ -2,7 +2,16 @@
 
 Personal macOS tool for setting an iOS 17+ iPhone's system-level location to a point picked on a map. USB-tethered, single user, no jailbreak. Built on top of [`pymobiledevice3`](https://github.com/doronz88/pymobiledevice3) tunneld.
 
-> **Disclaimer.** Use only on devices you own. Spoofing your device's location can break or violate the terms of service of apps that rely on location (ride-sharing, dating, games, banking, etc.) — that's on you. No warranty; see [`LICENSE`](LICENSE).
+> ### ⚠️ Disclaimer — read before use
+>
+> GPSMock is a developer / hobbyist tool. By using it, you accept the following:
+>
+> - **Devices you own only.** Do not run this against an iPhone you don't own or aren't authorized to use.
+> - **Lawful purposes only.** GPSMock must **not** be used for: fraud (insurance, refunds, fake alibis); circumventing court-ordered, parole, or employer-mandated location monitoring; stalking, harassment, or surveillance of any person; or any activity that's illegal in your jurisdiction. That includes — but isn't limited to — Taiwan's 跟蹤騷擾防制法, fraud statutes, and any equivalent in your country.
+> - **You will likely break apps' Terms of Service.** Ride-sharing, dating, location-based games, banking, attendance, and similar apps explicitly forbid spoofed location. Account bans, civil claims, or refused service are on you.
+> - **No warranty.** GPSMock can fail, hang, or leave your iPhone reporting a stale fix until reboot. Don't rely on it for anything that matters. The MIT license disclaims all warranty and liability — see [`LICENSE`](LICENSE).
+>
+> The author distributes this code as-is, for legitimate development and personal use. You are solely responsible for how you use it.
 
 ```
 GPSMock.app (SwiftUI, MapKit, OSRM)

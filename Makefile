@@ -66,8 +66,13 @@ app-release: app/GPSMock.xcodeproj
 install: app-release sudoers-install
 	rm -rf /Applications/GPSMock.app
 	cp -R $(APP_PRODUCT) /Applications/GPSMock.app
+	@# Stamp this checkout's path into the installed bundle so the app can find
+	@# sidecar/.venv at runtime regardless of where the user cloned the repo.
+	@plutil -remove GPSMockRepoPath /Applications/GPSMock.app/Contents/Info.plist 2>/dev/null || true
+	@plutil -insert GPSMockRepoPath -string "$(abspath .)" /Applications/GPSMock.app/Contents/Info.plist
 	@echo "✅ Installed /Applications/GPSMock.app — launch via Spotlight."
 	@echo "   The app will spawn tunneld + sidecar on launch and clean them up on quit."
+	@echo "   Bundled GPSMockRepoPath: $(abspath .)"
 
 sudoers-install: $(SIDECAR_VENV)
 	@printf "%s ALL=(ALL) NOPASSWD: %s -m pymobiledevice3 remote tunneld\n" "$(USER)" "$(abspath $(SIDECAR_PY))" | \

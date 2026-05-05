@@ -14,13 +14,27 @@ final class ServiceSupervisor: @unchecked Sendable {
 
     init() {
         let home = NSHomeDirectory()
+        // Resolution order: env var (debug / Xcode run) → bundled key written
+        // by `make install` → empty (handled by spawn methods, which log and bail).
         let envRepo = ProcessInfo.processInfo.environment["GPSMOCK_REPO"]
-        let repo = envRepo ?? "\(home)/worksapce/gps"
+        let bundledRepo = Bundle.main.object(forInfoDictionaryKey: "GPSMockRepoPath") as? String
+        let repo = envRepo ?? (bundledRepo?.isEmpty == false ? bundledRepo! : "")
         self.repoDir = repo
-        self.pythonPath = "\(repo)/sidecar/.venv/bin/python"
+        self.pythonPath = repo.isEmpty ? "" : "\(repo)/sidecar/.venv/bin/python"
         self.logDir = "\(home)/Library/Logs/GPSMock"
         try? FileManager.default.createDirectory(
             atPath: logDir, withIntermediateDirectories: true)
+    }
+
+    private func bailIfUnconfigured(_ which: String) -> Bool {
+        guard repoDir.isEmpty else { return false }
+        let msg = "[\(which)] cannot start: repo path not configured. " +
+                  "Set GPSMOCK_REPO env var, or rebuild with `make install` " +
+                  "(which writes GPSMockRepoPath into the app's Info.plist).\n"
+        if let data = msg.data(using: .utf8) {
+            try? logHandle("\(which).err").write(contentsOf: data)
+        }
+        return true
     }
 
     private func logHandle(_ name: String) -> FileHandle {
@@ -52,6 +66,7 @@ final class ServiceSupervisor: @unchecked Sendable {
     }
 
     private func spawnSidecar() {
+        if bailIfUnconfigured("sidecar") { return }
         lock.lock()
         guard sidecar == nil else { lock.unlock(); return }
         lock.unlock()
@@ -70,6 +85,7 @@ final class ServiceSupervisor: @unchecked Sendable {
     }
 
     private func spawnTunneld() {
+        if bailIfUnconfigured("tunneld") { return }
         lock.lock()
         guard tunneld == nil else { lock.unlock(); return }
         lock.unlock()

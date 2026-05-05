@@ -47,3 +47,7 @@ gpsmock/
 ## Status
 
 v1 in progress. See `openspec/changes/add-gpsmock/tasks.md` for current state.
+
+## Known quirks
+
+- When the **Prevent computer from sleeping while GPSMock is open** toggle (gear menu in the controls panel) is on, GPSMock holds an `IOPMAssertPreventUserIdleSystemSleep` assertion until you quit the app. The display is still allowed to sleep.

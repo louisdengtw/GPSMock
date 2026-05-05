@@ -10,6 +10,7 @@ final class StateStore {
         var spanLatDelta: Double?
         var spanLonDelta: Double?
         var speedMps: Double?
+        var preventSleep: Bool?
     }
 
     /// Hard-coded fallback when no last-known location is available.

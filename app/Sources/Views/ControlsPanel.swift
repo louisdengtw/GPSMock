@@ -40,6 +40,19 @@ struct ControlsPanel: View {
                         .buttonStyle(.bordered)
                         .tint(.red)
                 }
+
+                Menu {
+                    Toggle("Prevent computer from sleeping while GPSMock is open", isOn: Binding(
+                        get: { app.preventSleep },
+                        set: { app.setPreventSleep($0) }
+                    ))
+                } label: {
+                    Image(systemName: "gearshape")
+                }
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .help("Settings")
             }
 
             Divider()

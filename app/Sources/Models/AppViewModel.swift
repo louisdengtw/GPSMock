@@ -32,6 +32,7 @@ final class AppViewModel {
     var lastKnownRegion: MKCoordinateRegion
     var speedMps: Double
     var mode: InteractionMode = .teleport
+    var preventSleep: Bool
 
     // ---- Interaction state
     var pendingTarget: CLLocationCoordinate2D?
@@ -49,6 +50,7 @@ final class AppViewModel {
 
     private let store = StateStore()
     private let hadPersistedCenter: Bool
+    private let sleepAssertion = SleepAssertion()
 
     init() {
         let snap = store.load()
@@ -65,6 +67,10 @@ final class AppViewModel {
         self.lastKnownRegion = region
         self.cameraPosition = .region(region)
         self.speedMps = snap.speedMps ?? StateStore.defaultSpeed
+        self.preventSleep = snap.preventSleep ?? false
+        if self.preventSleep {
+            sleepAssertion.enable()
+        }
     }
 
     /// On first launch (no persisted center), ask CoreLocation for a one-shot
@@ -168,6 +174,16 @@ final class AppViewModel {
         pendingRoute = nil
     }
 
+    func setPreventSleep(_ enabled: Bool) {
+        preventSleep = enabled
+        if enabled {
+            sleepAssertion.enable()
+        } else {
+            sleepAssertion.disable()
+        }
+        persist()
+    }
+
     // ---------------------------------------------------------- camera persistence
 
     func cameraDidChange(_ region: MKCoordinateRegion) {
@@ -181,7 +197,8 @@ final class AppViewModel {
             centerLon: lastKnownRegion.center.longitude,
             spanLatDelta: lastKnownRegion.span.latitudeDelta,
             spanLonDelta: lastKnownRegion.span.longitudeDelta,
-            speedMps: speedMps
+            speedMps: speedMps,
+            preventSleep: preventSleep
         ))
     }
 
@@ -273,6 +290,7 @@ final class AppViewModel {
     // ---------------------------------------------------------- lifecycle
 
     func handleAppExit() {
+        sleepAssertion.disable()
         // Synchronous-ish best-effort clear; do not block UI more than ~2 s.
         let group = DispatchGroup()
         group.enter()

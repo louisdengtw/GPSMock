@@ -70,6 +70,11 @@ install: app-release sudoers-install
 	@# sidecar/.venv at runtime regardless of where the user cloned the repo.
 	@plutil -remove GPSMockRepoPath /Applications/GPSMock.app/Contents/Info.plist 2>/dev/null || true
 	@plutil -insert GPSMockRepoPath -string "$(abspath .)" /Applications/GPSMock.app/Contents/Info.plist
+	@# Re-seal the bundle: editing Info.plist after xcodebuild's adhoc sign
+	@# breaks the signature, which makes TCC refuse Location/Privacy grants.
+	@codesign --force --sign - --options runtime \
+		--entitlements app/Resources/GPSMock.entitlements \
+		/Applications/GPSMock.app
 	@echo "✅ Installed /Applications/GPSMock.app — launch via Spotlight."
 	@echo "   The app will spawn tunneld + sidecar on launch and clean them up on quit."
 	@echo "   Bundled GPSMockRepoPath: $(abspath .)"

@@ -68,14 +68,20 @@ actor SidecarClient {
         try ensureSuccess(data: data, response: resp, expecting: 200)
     }
 
-    func walk(points: [(lat: Double, lon: Double)], speedMps: Double) async throws {
+    func walk(
+        points: [(lat: Double, lon: Double)],
+        speedMps: Double,
+        loop: Bool = false
+    ) async throws {
         struct Body: Encodable {
             let points: [[Double]]
             let speed_mps: Double
+            let loop: Bool
         }
         let body = Body(
             points: points.map { [$0.lat, $0.lon] },
-            speed_mps: speedMps
+            speed_mps: speedMps,
+            loop: loop
         )
         var req = makeRequest(path: "/walk", method: "POST")
         req.httpBody = try JSONEncoder().encode(body)

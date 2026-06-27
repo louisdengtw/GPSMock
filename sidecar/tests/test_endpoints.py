@@ -174,6 +174,40 @@ def test_walk_no_device(client_no_device):
     assert r.status_code == 503
 
 
+def test_walk_loop_keeps_walking(client_with_device):
+    """loop=True returns 202 and keeps walking; /clear stops it."""
+    client, _ = client_with_device
+    # Far-apart closed loop so it stays walking long enough to observe.
+    body = {
+        "points": [[25.0, 121.0], [25.5, 121.0], [25.5, 121.5], [25.0, 121.0]],
+        "speed_mps": 1.0,
+        "loop": True,
+    }
+    r = client.post("/walk", json=body)
+    assert r.status_code == 202
+    assert client.get("/status").json()["walking"] is True
+    client.post("/clear")
+    assert client.get("/status").json()["walking"] is False
+
+
+def test_walk_defaults_to_one_shot(client_with_device):
+    """Omitting loop defaults to a one-shot walk that settles on its own."""
+    client, _ = client_with_device
+    body = {
+        "points": [[25.0, 121.0], [25.00001, 121.00001]],
+        "speed_mps": 1.0,
+    }
+    r = client.post("/walk", json=body)
+    assert r.status_code == 202
+    # The tiny walk finishes near-instantly; walking → False without a /clear.
+    deadline = time.time() + 5
+    while time.time() < deadline:
+        if client.get("/status").json()["walking"] is False:
+            break
+        time.sleep(0.05)
+    assert client.get("/status").json()["walking"] is False
+
+
 # ----------------------------------------------------------- /clear
 
 

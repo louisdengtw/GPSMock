@@ -30,14 +30,34 @@ struct ContentView: View {
                 .padding(16)
         }
         .overlay(alignment: .bottom) {
-            ControlsPanel()
-                .padding(16)
-        }
-        .overlay(alignment: .center) {
-            if let plan = app.pendingRoute, app.mode == .walk {
-                WalkPreviewSheet(plan: plan)
+            VStack(spacing: 12) {
+                if app.isLooping {
+                    LoopRunningBar()
+                } else if app.isDrawingLoop {
+                    LoopDrawSheet(plan: app.pendingRoute)
+                } else if let plan = app.pendingRoute, app.mode == .walk {
+                    WalkPreviewSheet(plan: plan)
+                } else if app.mode == .walk {
+                    LoopEntryButton()
+                }
+                ControlsPanel()
             }
+            .padding(16)
         }
+        .background(
+            Button("") {
+                // Esc backs out of whichever transient state is active.
+                if app.isDrawingLoop {
+                    app.cancelDrawingLoop()
+                } else if app.isPickingStart {
+                    app.endPickingStart()
+                }
+            }
+            .keyboardShortcut(.escape, modifiers: [])
+            .disabled(!app.isPickingStart && !app.isDrawingLoop)
+            .opacity(0)
+            .accessibilityHidden(true)
+        )
     }
 }
 

@@ -89,8 +89,17 @@ class Walker:
 
     # ------------------------------------------------------------------ public
 
-    def start(self, points: Sequence[tuple[float, float]], speed_mps: float) -> None:
-        """Cancel any active walk and start a new one. Returns immediately."""
+    def start(
+        self,
+        points: Sequence[tuple[float, float]],
+        speed_mps: float,
+        loop: bool = False,
+    ) -> None:
+        """Cancel any active walk and start a new one. Returns immediately.
+
+        When `loop` is true the walker replays the polyline lap after lap until
+        cancelled, instead of stopping on the final point.
+        """
         if len(points) < 2:
             raise ValueError("walk requires at least 2 points")
         if not (0 < speed_mps <= 10):
@@ -101,8 +110,9 @@ class Walker:
 
         total_m = sum(haversine_m(pts[i], pts[i + 1]) for i in range(len(pts) - 1))
         log.info(
-            "walker start: %d points, %.0fm @ %.2f m/s (~%.0fs)",
+            "walker start: %d points, %.0fm @ %.2f m/s (~%.0fs)%s",
             len(pts), total_m, speed_mps, total_m / speed_mps,
+            " [loop]" if loop else "",
         )
 
         with self._lock:
@@ -111,7 +121,7 @@ class Walker:
             self._walking = True
             self._thread = threading.Thread(
                 target=self._run,
-                args=(pts, float(speed_mps), self._cancel),
+                args=(pts, float(speed_mps), self._cancel, loop),
                 name="gpsmock-walker",
                 daemon=True,
             )
@@ -161,21 +171,33 @@ class Walker:
         points: list[tuple[float, float]],
         base_speed: float,
         cancel: threading.Event,
+        loop: bool = False,
     ) -> None:
-        """Worker body. Walk segment-by-segment, ~1 Hz updates."""
+        """Worker body. Walk segment-by-segment, ~1 Hz updates.
+
+        When `loop` is true the segment sweep repeats until cancelled. A loop
+        polyline is expected to be closed (last point ≈ first point), so flowing
+        from the final segment straight into the next lap produces no jump and we
+        skip the no-jitter land-on-final-point publish used for one-shot walks.
+        """
         t0 = time.monotonic()
         completed = False
         try:
             self._publish(points[0])
-            for i in range(len(points) - 1):
-                if cancel.is_set():
-                    return
-                segment_speed = base_speed * self._rng.uniform(*SPEED_JITTER_RANGE)
-                self._walk_segment(points[i], points[i + 1], segment_speed, cancel)
-                if cancel.is_set():
-                    return
+            while True:
+                for i in range(len(points) - 1):
+                    if cancel.is_set():
+                        return
+                    segment_speed = base_speed * self._rng.uniform(*SPEED_JITTER_RANGE)
+                    self._walk_segment(points[i], points[i + 1], segment_speed, cancel)
+                    if cancel.is_set():
+                        return
+                if not loop:
+                    break
+                # Closed loop: next lap starts where this one ended (points[-1] ≈
+                # points[0]), so continue without re-publishing or jumping.
             # Land cleanly on the final point with no jitter so the user's chosen
-            # destination is exactly where the iPhone ends up.
+            # destination is exactly where the iPhone ends up (one-shot only).
             self._publish(points[-1], jitter=False)
             completed = True
         finally:

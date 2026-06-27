@@ -119,6 +119,65 @@ def test_walk_lands_on_final_point():
     assert last == polyline[-1]
 
 
+# ----------------------------------------------------------- loop mode
+
+
+def test_loop_repeats_until_cancelled():
+    """loop=True replays a closed polyline lap after lap until cancel is set."""
+    # Closed loop: last point == first point. Segments are hundreds of meters so
+    # one lap is many ticks; a push-count cancel guarantees we ran well past one.
+    polyline = [
+        (25.0000, 121.0000),
+        (25.0010, 121.0000),
+        (25.0010, 121.0010),
+        (25.0000, 121.0000),
+    ]
+    pushed: list[tuple[float, float]] = []
+    clock = FakeClock()
+    rng = random.Random(0)
+    cancel = threading.Event()
+
+    def push(lat: float, lon: float) -> None:
+        pushed.append((lat, lon))
+        if len(pushed) >= 400:  # ~one lap is ~270 ticks → 400 spans ≥2 laps
+            cancel.set()
+
+    w = Walker(push=push, sleeper=clock.sleep, rng=rng)
+    w._cancel = cancel
+    w._walking = True
+    w._run([tuple(p) for p in polyline], 1.3, cancel, loop=True)
+
+    # The walker returned (didn't hang) and kept going past a single lap.
+    assert len(pushed) >= 400
+    _, walking = w.state()
+    assert walking is False  # _run flips walking off on return
+
+    # It must have re-passed near the start point more than once (≥2 laps).
+    start = polyline[0]
+    near_start = sum(1 for p in pushed if haversine_m(p, start) <= 2.0)
+    assert near_start >= 3  # initial publish + one return per completed lap
+
+
+def test_loop_cancel_stops_within_a_tick():
+    """A looping walker started on a thread stops promptly when cancelled."""
+    pushed: list[tuple[float, float]] = []
+
+    def push(lat: float, lon: float) -> None:
+        pushed.append((lat, lon))
+
+    w = Walker(push=push)  # real time.sleep
+    loop = [(25.0, 121.0), (25.001, 121.0), (25.001, 121.001), (25.0, 121.0)]
+    w.start(loop, speed_mps=1.0, loop=True)
+
+    import time
+
+    # Give it a moment to actually be walking, then cancel.
+    time.sleep(0.2)
+    assert w.state()[1] is True
+    w.cancel()
+    assert w.state()[1] is False
+
+
 # ----------------------------------------------------------- single-flight
 
 

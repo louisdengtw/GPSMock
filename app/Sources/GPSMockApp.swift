@@ -30,6 +30,8 @@ struct GPSMockApp: App {
                 .frame(minWidth: 900, minHeight: 600)
                 .task {
                     appModel.bootstrap(connection: connection, status: status)
+                    let supervisor = appDelegate.supervisor
+                    connection.onTunneldStuck = { supervisor.restartTunneld() }
                     async let locate: Void = appModel.acquireInitialLocationIfNeeded()
                     await connection.start()
                     await locate

@@ -22,8 +22,12 @@ enum OSRMClient {
         from origin: CLLocationCoordinate2D,
         to destination: CLLocationCoordinate2D
     ) async -> RoutePlan {
+        // FOSSGIS routed-foot — the project-osrm.org demo ignores the profile
+        // path and serves car-only data, so `foot` requests there return
+        // motorway-included routes. routing.openstreetmap.de hosts separate
+        // OSRM instances per profile (routed-foot / routed-bike / routed-car).
         let url = URL(
-            string: "https://router.project-osrm.org/route/v1/foot/" +
+            string: "https://routing.openstreetmap.de/routed-foot/route/v1/foot/" +
                 "\(origin.longitude),\(origin.latitude);" +
                 "\(destination.longitude),\(destination.latitude)" +
                 "?overview=full&geometries=geojson"
@@ -57,6 +61,58 @@ enum OSRMClient {
         }
     }
 
+    /// Route a closed loop through the given waypoints in order, returning to the
+    /// first waypoint, so each lap joins seamlessly. Falls back to a straight-line
+    /// closed polygon on any failure.
+    static func loopRoute(
+        through waypoints: [CLLocationCoordinate2D]
+    ) async -> RoutePlan {
+        // Closing the loop needs at least two distinct points.
+        guard waypoints.count >= 2 else {
+            return loopFallback(
+                waypoints: waypoints,
+                reason: "Need at least 2 waypoints — using straight line"
+            )
+        }
+
+        // Append the first waypoint to close the loop: p0;p1;…;pN;p0.
+        let closed = waypoints + [waypoints[0]]
+        let path = closed
+            .map { "\($0.longitude),\($0.latitude)" }
+            .joined(separator: ";")
+        let url = URL(
+            string: "https://routing.openstreetmap.de/routed-foot/route/v1/foot/" +
+                path + "?overview=full&geometries=geojson"
+        )!
+
+        do {
+            let (data, resp) = try await session.data(from: url)
+            guard let http = resp as? HTTPURLResponse, http.statusCode == 200 else {
+                return loopFallback(waypoints: waypoints,
+                                    reason: "OSRM unavailable — using straight line")
+            }
+            let decoded = try JSONDecoder().decode(OSRMResponse.self, from: data)
+            guard let route = decoded.routes.first,
+                  !route.geometry.coordinates.isEmpty else {
+                return loopFallback(waypoints: waypoints,
+                                    reason: "OSRM returned no route — using straight line")
+            }
+            let polyline = route.geometry.coordinates.map {
+                // GeoJSON: [lon, lat]
+                CLLocationCoordinate2D(latitude: $0[1], longitude: $0[0])
+            }
+            return RoutePlan(
+                polyline: polyline,
+                distanceMeters: route.distance,
+                usedFallback: false,
+                fallbackReason: nil
+            )
+        } catch {
+            return loopFallback(waypoints: waypoints,
+                                reason: "OSRM unavailable — using straight line")
+        }
+    }
+
     private static func fallback(
         origin: CLLocationCoordinate2D,
         destination: CLLocationCoordinate2D,
@@ -66,6 +122,26 @@ enum OSRMClient {
         let distance = haversine(origin, destination)
         return RoutePlan(
             polyline: polyline,
+            distanceMeters: distance,
+            usedFallback: true,
+            fallbackReason: reason
+        )
+    }
+
+    /// Straight-line closed polygon through the waypoints in order, back to the
+    /// first. Distance is the summed Haversine length of every leg including the
+    /// closing one, so per-lap ETA stays meaningful.
+    private static func loopFallback(
+        waypoints: [CLLocationCoordinate2D],
+        reason: String
+    ) -> RoutePlan {
+        let closed = waypoints.isEmpty ? waypoints : waypoints + [waypoints[0]]
+        var distance = 0.0
+        for i in 0..<max(0, closed.count - 1) {
+            distance += haversine(closed[i], closed[i + 1])
+        }
+        return RoutePlan(
+            polyline: closed,
             distanceMeters: distance,
             usedFallback: true,
             fallbackReason: reason

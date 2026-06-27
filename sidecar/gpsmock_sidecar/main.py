@@ -45,6 +45,7 @@ class TeleportBody(BaseModel):
 class WalkBody(BaseModel):
     points: list[tuple[float, float]]
     speed_mps: float = Field(..., gt=0, le=10)
+    loop: bool = False
 
     @field_validator("points")
     @classmethod
@@ -141,8 +142,8 @@ def create_app(device: DeviceManager | None = None) -> FastAPI:
         w: Walker = Depends(_walker_dep),
     ) -> dict:
         log.info(
-            "/walk points=%d speed=%.2f m/s start=(%.6f,%.6f) end=(%.6f,%.6f)",
-            len(body.points), body.speed_mps,
+            "/walk points=%d speed=%.2f m/s loop=%s start=(%.6f,%.6f) end=(%.6f,%.6f)",
+            len(body.points), body.speed_mps, body.loop,
             body.points[0][0], body.points[0][1],
             body.points[-1][0], body.points[-1][1],
         )
@@ -159,7 +160,7 @@ def create_app(device: DeviceManager | None = None) -> FastAPI:
             raise HTTPException(503, {"error": "mounter_failed", "detail": str(e)})
 
         try:
-            w.start(body.points, body.speed_mps)
+            w.start(body.points, body.speed_mps, loop=body.loop)
         except ValueError as e:
             log.warning("/walk: invalid input — %s", e)
             raise HTTPException(400, str(e))

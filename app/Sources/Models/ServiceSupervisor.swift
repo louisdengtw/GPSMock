@@ -65,6 +65,19 @@ final class ServiceSupervisor: @unchecked Sendable {
         t?.terminate()
     }
 
+    /// Kill the current tunneld and spawn a fresh one. Used by the connection
+    /// watchdog when tunneld stays alive but the OS route to the device has
+    /// disappeared (network change, VPN flap, etc) — restarting the process
+    /// triggers pymobiledevice3 to re-add the route.
+    func restartTunneld() {
+        lock.lock()
+        let old = tunneld
+        tunneld = nil
+        lock.unlock()
+        old?.terminate()
+        spawnTunneld()
+    }
+
     private func spawnSidecar() {
         if bailIfUnconfigured("sidecar") { return }
         lock.lock()

@@ -37,6 +37,16 @@ final class ConnectionStateModel {
     private(set) var state: ConnectionState = .sidecarDown(detail: "starting")
     private var pollTask: Task<Void, Never>?
 
+    /// Fired when tunneld appears stuck (alive but unable to reach the device,
+    /// usually because the IPv6 route was dropped by a network change). The app
+    /// wires this to `ServiceSupervisor.restartTunneld()`.
+    @ObservationIgnored var onTunneldStuck: (() -> Void)?
+
+    private let tunneldRestartThreshold = 3
+    private let tunneldRestartCooldown: TimeInterval = 30
+    @ObservationIgnored private var tunneldFailureCount = 0
+    @ObservationIgnored private var lastTunneldRestart: Date?
+
     func start() async {
         pollTask?.cancel()
         pollTask = Task { await self.pollLoop() }
@@ -55,6 +65,7 @@ final class ConnectionStateModel {
         while !Task.isCancelled {
             let next = await tickOnce()
             await MainActor.run { self.state = next }
+            maybeTriggerTunneldRestart(for: next)
 
             let interval: UInt64
             if next.isReady {
@@ -66,6 +77,22 @@ final class ConnectionStateModel {
             }
             try? await Task.sleep(nanoseconds: interval)
         }
+    }
+
+    private func maybeTriggerTunneldRestart(for state: ConnectionState) {
+        guard case .tunneldUnreachable = state else {
+            tunneldFailureCount = 0
+            return
+        }
+        tunneldFailureCount += 1
+        guard tunneldFailureCount >= tunneldRestartThreshold else { return }
+        if let last = lastTunneldRestart,
+           Date().timeIntervalSince(last) < tunneldRestartCooldown {
+            return
+        }
+        lastTunneldRestart = Date()
+        tunneldFailureCount = 0
+        onTunneldStuck?()
     }
 
     private func tickOnce() async -> ConnectionState {

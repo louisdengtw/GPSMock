@@ -31,8 +31,8 @@
 ## 5. Layout integration
 
 - [x] 5.1 In `ContentView.swift`, change the `WalkPreviewSheet` overlay alignment from `.center` to `.bottom`, with bottom padding sized to clear `ControlsPanel`
-- [ ] 5.2 Verify on a 1000×700 window that the polyline's bounding box at default zoom is fully visible above the docked preview
-- [ ] 5.3 Verify on a tall narrow window (e.g., 800×1100) that the preview still docks cleanly and does not bleed off the controls panel
+- [x] 5.2 Verify on a 1000×700 window that the polyline's bounding box at default zoom is fully visible above the docked preview
+- [x] 5.3 Verify on a tall narrow window (e.g., 800×1100) that the preview still docks cleanly and does not bleed off the controls panel
 
 ## 6. Esc key wiring
 
@@ -40,11 +40,11 @@
 
 ## 7. Manual test plan
 
-- [ ] 7.1 Walk → tap destination → confirm the polyline is fully visible and the preview is docked at the bottom
-- [ ] 7.2 Drag the green Start handle to a new map location → verify route re-plans and old polyline fades during re-plan
-- [ ] 7.3 Click "Set start here" → tap a map point → verify origin updates, picking state exits, button reverts
-- [ ] 7.4 Click "Set start here" → press Esc → verify picking state exits, no origin change
-- [ ] 7.5 With a custom origin set, click "Reset start to GPS" → verify route re-plans from default origin and the button hides
-- [ ] 7.6 Quit and relaunch → verify the start-handle hint does NOT reappear (`seenStartHint` persisted)
-- [ ] 7.7 Delete `~/Library/Application Support/GPSMock/state.json`, relaunch → verify hint reappears once on the first walk preview
-- [ ] 7.8 Switch from Walk to Teleport mode while in `pickingStart` → verify state clears and the next tap behaves as a teleport target
+- [x] 7.1 Walk → tap destination → confirm the polyline is fully visible and the preview is docked at the bottom
+- [x] 7.2 Drag the green Start handle to a new map location → verify route re-plans and old polyline fades during re-plan
+- [x] 7.3 Click "Set start here" → tap a map point → verify origin updates, picking state exits, button reverts
+- [x] 7.4 Click "Set start here" → press Esc → verify picking state exits, no origin change
+- [x] 7.5 With a custom origin set, click "Reset start to GPS" → verify route re-plans from default origin and the button hides
+- [x] 7.6 Quit and relaunch → verify the start-handle hint does NOT reappear (`seenStartHint` persisted)
+- [x] 7.7 Delete `~/Library/Application Support/GPSMock/state.json`, relaunch → verify hint reappears once on the first walk preview
+- [x] 7.8 Switch from Walk to Teleport mode while in `pickingStart` → verify state clears and the next tap behaves as a teleport target

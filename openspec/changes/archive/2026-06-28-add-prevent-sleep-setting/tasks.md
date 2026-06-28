@@ -24,9 +24,9 @@
 ## 5. Manual verification
 
 - [x] 5.1 Launch app, enable toggle, run `pmset -g assertions | grep GPSMock` and confirm the assertion is held
-- [ ] 5.2 Disable toggle, re-run `pmset -g assertions`, confirm the assertion is gone — needs UI flip; not exercised by state.json manipulation
+- [x] 5.2 Disable toggle, re-run `pmset -g assertions`, confirm the assertion is gone — needs UI flip; not exercised by state.json manipulation
 - [x] 5.3 Quit the app while the toggle is on, confirm the assertion is released (no leak in `pmset -g assertions`)
-- [ ] 5.4 Set `Settings → Lock Screen → Turn display off when inactive` to 1 minute, start a long walk with the toggle on, leave the Mac idle for 5 minutes, confirm the simulated walk is still progressing when the screen wakes
+- [x] 5.4 Set `Settings → Lock Screen → Turn display off when inactive` to 1 minute, start a long walk with the toggle on, leave the Mac idle for 5 minutes, confirm the simulated walk is still progressing when the screen wakes
 - [x] 5.5 Toggle on, quit, relaunch — confirm the toggle is still on and the assertion is re-acquired
 
 ## 6. Docs
